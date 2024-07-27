@@ -1,11 +1,6 @@
 # main image
 FROM php:8.1-apache
 
-# arguments
-ARG CONTAINER_PROJECT_PATH
-ARG CONTAINER_UID
-ARG CONTAINER_USER
-
 ARG CONTAINER_PROJECT_PATH
 ARG CONTAINER_UID
 ARG CONTAINER_USER
@@ -69,6 +64,9 @@ ARG GITHUB_CLIENT_SECRET
 ARG GITHUB_CALLBACK_URL
 ARG ELASTICSEARCH_HOST
 
+
+ENV DBURL=${DB_HOST}:${DB_PORT}
+
 # installing dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -103,6 +101,8 @@ RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 RUN npm install -g npx
 RUN npm install -g laravel-echo-server
 
+RUN pwd
+
 # setting work directory
 WORKDIR $CONTAINER_PROJECT_PATH
 
@@ -126,11 +126,35 @@ RUN chown -R $CONTAINER_USER:www-data $CONTAINER_PROJECT_PATH
 # changing user
 USER $CONTAINER_USER
 
-RUN /opt/wait-for-it.sh ${DB_HOST}:${DB_PORT}
+ENV APP_DIR=${CONTAINER_PROJECT_PATH}bagisto
+
+WORKDIR $APP_DIR
+
+RUN /opt/wait-for-it.sh ${DBURL}
+
+COPY . .
+
+# Change ownership of the copied files
+USER root
+RUN chown -R $CONTAINER_USER:www-data $APP_DIR
+
+# Switch back to the container user
+USER $CONTAINER_USER
+
+RUN pwd
+
+RUN ls -al
+
 RUN composer install
 
 RUN php artisan optimize:clear
-RUN php artisan migrate:fresh --seed
+#RUN php artisan migrate:fresh --seed
 RUN php artisan storage:link
 RUN php artisan bagisto:publish --force
 RUN php artisan optimize:clear
+
+WORKDIR $CONTAINER_PROJECT_PATH
+
+RUN ls -al
+
+RUN ln -snf bagisto/public public_html
